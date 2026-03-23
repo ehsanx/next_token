@@ -4,7 +4,7 @@ An interactive, offline browser game that teaches how large language models work
 
 Built for classroom use at the **University of British Columbia** as a demonstration tool for students learning about AI/LLM mechanics.
 
-🔗 **[Play it here →](https://your-username.github.io/your-repo-name/next-token-tabbed.html)**
+🔗 **[Play it here →](https://ehsanx.github.io/next_token)**
 
 ---
 
@@ -88,8 +88,8 @@ Partial matching is applied (prefix/suffix overlap). Maximum score per tab: **50
 1. Create a new repository (public) on GitHub
 2. Clone it locally:
    ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   cd your-repo-name
+   git clone https://github.com/ehsanx/next_token.git
+   cd next_token
    ```
 3. Copy `next-token-tabbed.html` into the repo root. Optionally rename it `index.html` so the game loads at the root URL rather than requiring `/next-token-tabbed.html` in the path:
    ```bash
@@ -104,7 +104,7 @@ Partial matching is applied (prefix/suffix overlap). Maximum score per tab: **50
 5. In your repository on GitHub, go to **Settings → Pages → Source**, select **Deploy from a branch**, choose `main` and `/ (root)`, and click **Save**.
 6. Wait ~60 seconds. Your site will be live at:
    ```
-   https://your-username.github.io/your-repo-name/
+   ehsanx/next_token
    ```
 
 ### Updating
@@ -124,7 +124,7 @@ git push
 A minimal repo only needs two files:
 
 ```
-your-repo/
+next_token/
 ├── index.html        ← the game (renamed from next-token-tabbed.html)
 └── README.md         ← this file
 ```
@@ -185,7 +185,7 @@ Probabilities are in percentage points and do not need to sum to exactly 100 (th
 
 If you use this tool in a course, workshop, or publication, please cite:
 
-> Karim MR. *next_token[ ] — LLM Next-Token Prediction Game*. University of British Columbia, 2025. Available at: https://your-username.github.io/your-repo-name/
+> Karim MR. *next_token[ ] — LLM Next-Token Prediction Game*. 2025. Available at: https://ehsanx.github.io/next_token
 
 ---
 
