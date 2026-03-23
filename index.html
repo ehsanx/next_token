@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Next Token — LLM Prediction Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ── CSS VARIABLES ─────────────────────────────────── */
+:root {
+  --bg:      #f7f5f0;
+  --bg2:     #edeae2;
+  --bg3:     #e3dfd6;
+  --white:   #ffffff;
+  --ink:     #181410;
+  --ink2:    #3d3830;
+  --ink3:    #7a7060;
+  --rule:    #d4cfc4;
+  --shadow:  0 2px 10px rgba(0,0,0,0.07);
+  --shadow-lg: 0 6px 28px rgba(0,0,0,0.11);
+  --radius:  5px;
+  --mono: 'JetBrains Mono', monospace;
+  --serif: 'Spectral', serif;
+  /* Tab color — overridden dynamically */
+  --tc: #2d6a8a;
+  --tc-light: #e5f0f8;
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* ── PAPER LINES ── */
+body::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image: repeating-linear-gradient(
+    0deg, transparent, transparent 27px,
+    rgba(0,0,0,0.03) 27px, rgba(0,0,0,0.03) 28px
+  );
+  pointer-events:none;
+  z-index:0;
+}
+
+.app-wrap { max-width: 840px; margin: 0 auto; padding: 0 1rem 4rem; position:relative; z-index:1; }
+
+/* ── HEADER ── */
+.app-header {
+  padding: 2rem 0 1.2rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.app-header h1 {
+  font-family: var(--mono);
+  font-size: clamp(1.4rem,4vw,2.2rem);
+  font-weight: 600;
+  letter-spacing: -.04em;
+  color: var(--ink);
+}
+.app-header p {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: .82rem;
+  color: var(--ink3);
+  font-weight: 300;
+  max-width: 300px;
+  text-align: right;
+}
+
+/* ── TABS ── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--white);
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-top: 1.5rem;
+  box-shadow: var(--shadow);
+}
+.tab-bar::-webkit-scrollbar { display:none; }
+
+.tab-btn {
+  font-family: var(--mono);
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: .85rem 1.1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink3);
+  white-space: nowrap;
+  position: relative;
+  transition: color .2s, background .2s;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--ink2); background: var(--bg2); }
+.tab-btn.active {
+  color: var(--tc);
+  border-bottom-color: var(--tc);
+  background: var(--white);
+}
+.tab-btn .done-mark {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--tc);
+  display: none;
+  margin-left: .2rem;
+}
+.tab-btn.completed .done-mark { display: inline-block; }
+
+/* ── CONTENT AREA ── */
+.content-area {
+  background: var(--white);
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── TAB INTRO (shown before starting) ── */
+.tab-intro {
+  padding: 1.8rem 2rem;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.tab-intro-text h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: .3rem;
+}
+.tab-intro-text p {
+  font-size: .85rem;
+  color: var(--ink3);
+  font-style: italic;
+  max-width: 420px;
+}
+.tab-intro-meta {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.meta-pill {
+  font-family: var(--mono);
+  font-size: .62rem;
+  letter-spacing: .08em;
+  padding: .2rem .7rem;
+  border-radius: 2px;
+  border: 1px solid var(--rule);
+  color: var(--ink3);
+  background: var(--bg2);
+}
+.meta-pill.accent-pill {
+  color: var(--tc);
+  border-color: var(--tc);
+  background: var(--tc-light);
+}
+
+/* ── SCORE ROW ── */
+.score-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  border-bottom: 1px solid var(--rule);
+}
+.score-cell {
+  padding: .8rem 1.2rem;
+  border-right: 1px solid var(--rule);
+  text-align: center;
+}
+.score-cell:last-child { border-right: none; }
+.sc-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: .55rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin-bottom: .2rem;
+}
+.sc-val {
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+.sc-val.accent { color: var(--tc); }
+.pips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: .8rem 1.2rem;
+  justify-content: center;
+}
+.pip {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--rule);
+  background: transparent;
+  transition: all .3s;
+  flex-shrink: 0;
+}
+.pip.done    { background: var(--tc); border-color: var(--tc); }
+.pip.active  { background: var(--tc); border-color: var(--tc); transform: scale(1.3); box-shadow: 0 0 0 3px var(--tc-light); }
+.pip.skipped { background: var(--rule); border-color: var(--rule); }
+
+/* ── ENTROPY METER ── */
+.entropy-bar-wrap {
+  padding: .9rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+}
+.ent-label {
+  font-family: var(--mono);
+  font-size: .58rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  flex-shrink: 0;
+}
+.ent-track {
+  flex: 1;
+  min-width: 120px;
+  height: 8px;
+  background: var(--bg3);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
+.ent-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .8s ease, background .6s ease;
+  width: 0%;
+  background: var(--tc);
+}
+.ent-val {
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink2);
+  min-width: 90px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.ent-axis {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: .55rem;
+  color: var(--ink3);
+  letter-spacing: .04em;
+  margin-top: .15rem;
+}
+
+/* ── GAME CARD BODY ── */
+.game-body { padding: 1.5rem; }
+
+.prompt-label {
+  font-family: var(--mono);
+  font-size: .58rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin-bottom: .75rem;
+}
+.prompt-display {
+  font-family: var(--mono);
+  font-size: clamp(.8rem,1.8vw,.98rem);
+  line-height: 2.1;
+  margin-bottom: 1.4rem;
+}
+.tok {
+  display: inline-block;
+  background: var(--bg2);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: .08em .32em;
+  margin: .08em .1em;
+  font-size: .92em;
+  color: var(--ink2);
+  transition: background .15s;
+}
+.tok:hover { background: var(--bg3); }
+.tok-blank {
+  display: inline-block;
+  border: 2px dashed var(--tc);
+  color: var(--tc);
+  border-radius: 3px;
+  padding: .08em .5em;
+  margin: .08em .15em;
+  min-width: 60px;
+  text-align: center;
+  background: var(--tc-light);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+/* Input row */
+.input-row { display: flex; gap: .7rem; align-items: stretch; margin-bottom: .5rem; }
+.word-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: .95rem;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  padding: .7rem 1rem;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.word-input:focus { border-color: var(--tc); box-shadow: 0 0 0 3px var(--tc-light); }
+.word-input:disabled { opacity: .4; cursor: not-allowed; }
+.word-input::placeholder { color: var(--ink3); font-style: italic; }
+.btn-submit {
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: .7rem 1.4rem;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.btn-submit:hover:not(:disabled) {
+  background: var(--tc);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+}
+.btn-submit:disabled { opacity: .35; cursor: not-allowed; }
+.btn-skip {
+  background: transparent;
+  border: none;
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--ink3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: .2rem 0;
+  transition: color .15s;
+}
+.btn-skip:hover { color: var(--ink2); }
+
+/* ── TEMPERATURE SLIDER ── */
+.temp-section {
+  border-top: 1px solid var(--rule);
+  padding: .9rem 1.5rem;
+  background: var(--bg);
+}
+.temp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; }
+.temp-lbl {
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.temp-cur {
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink2);
+}
+input[type=range].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: var(--ink);
+  cursor: pointer;
+  transition: background .2s;
+  border: 2px solid var(--white);
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+input[type=range].slider::-webkit-slider-thumb:hover { background: var(--tc); }
+.temp-hints { display:flex; justify-content:space-between; margin-top:.35rem; font-family:var(--mono); font-size:.56rem; color:var(--ink3); letter-spacing:.04em; }
+
+/* ── RESULTS ── */
+.results-section {
+  display: none;
+  border-top: 1px solid var(--rule);
+  padding: 1.5rem;
+  animation: slide-up .35s ease;
+}
+.results-section.visible { display: block; }
+@keyframes slide-up { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.res-label { font-family:var(--mono); font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); }
+.pts-badge {
+  font-family: var(--mono);
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .22rem .7rem;
+  border-radius: 3px;
+  border: 1.5px solid;
+}
+.pts-a { color:#1a7a3a; border-color:#1a7a3a; background:rgba(26,122,58,.07); }
+.pts-b { color:#1a5c96; border-color:#1a5c96; background:rgba(26,92,150,.07); }
+.pts-c { color:#b86a00; border-color:#b86a00; background:rgba(184,106,0,.07); }
+.pts-d { color:var(--ink3); border-color:var(--rule); background:transparent; }
+
+/* Probability bars */
+.prob-chart { display:flex; flex-direction:column; gap:.5rem; margin-bottom:1rem; }
+.prob-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 52px 24px;
+  align-items: center;
+  gap: .6rem;
+}
+.pw {
+  font-family: var(--mono);
+  font-size: .82rem;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+.pw.r1 { color: var(--ink); font-weight: 600; }
+.pw.hit { color: var(--tc); font-weight: 600; }
+.pw.miss { color: #c07000; font-style: italic; }
+.prob-track {
+  height: 22px;
+  background: var(--bg2);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  position: relative;
+}
+.prob-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .75s cubic-bezier(.16,1,.3,1);
+  width: 0%;
+  position: relative;
+}
+.prob-fill::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent 60%,rgba(255,255,255,.15)); }
+.pf-1 { background: linear-gradient(90deg, var(--tc), color-mix(in srgb, var(--tc) 70%, white)); }
+.pf-2 { background: linear-gradient(90deg, #2e7d52, #41b377); }
+.pf-3 { background: linear-gradient(90deg, #6b3fa0, #9b59b6); }
+.pf-4 { background: linear-gradient(90deg, #8a7060, #b09a88); }
+.pf-5 { background: linear-gradient(90deg, #a09080, #c8b8a8); }
+.pf-user { background: linear-gradient(90deg, #b86a00, #e08000); }
+.pp { font-family:var(--mono); font-size:.7rem; color:var(--ink3); text-align:right; }
+.pp.hi { color:var(--tc); font-weight:600; }
+.rank-m { font-family:var(--mono); font-size:.58rem; color:var(--ink3); text-align:center; }
+.rank-m.r1 { color:var(--tc); }
+.user-sep { border:none; border-top:1px dashed var(--rule); margin:.5rem 0; }
+
+/* Stats row */
+.stats-row {
+  display: flex;
+  gap: .6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: .7rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 1rem;
+}
+.stat-pill {
+  font-family: var(--mono);
+  font-size: .7rem;
+  padding: .28rem .75rem;
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  background: var(--bg2);
+  color: var(--ink2);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.stat-pill b { color: var(--ink); font-weight: 600; }
+.stat-pill.hl { border-color: var(--tc); background: var(--tc-light); color: var(--tc); }
+.stat-pill.hl b { color: var(--tc); }
+
+/* Insight */
+.insight-box {
+  background: var(--bg);
+  border-left: 3px solid var(--tc);
+  padding: .9rem 1.1rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: .88rem;
+  line-height: 1.65;
+  color: var(--ink2);
+  margin-bottom: .9rem;
+}
+.insight-box strong { color: var(--ink); }
+.insight-box .chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: .76em;
+  background: var(--bg2);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: .05em .35em;
+  color: var(--ink2);
+}
+
+/* Deep dive toggle */
+.dd-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  background: var(--bg2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: .55rem 1rem;
+  font-family: var(--mono);
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--ink2);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all .15s;
+  margin-bottom: .6rem;
+  letter-spacing: .03em;
+}
+.dd-toggle:hover { background: var(--bg3); color: var(--ink); }
+.dd-toggle .dd-arrow { margin-left: auto; transition: transform .25s; font-style: normal; }
+.dd-toggle.open .dd-arrow { transform: rotate(180deg); }
+
+/* Deep dive panel */
+.dd-panel {
+  display: none;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1.3rem;
+  margin-bottom: .9rem;
+  animation: slide-up .25s ease;
+}
+.dd-panel.open { display: block; }
+
+.dd-section-title {
+  font-family: var(--mono);
+  font-size: .58rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin-bottom: .7rem;
+  padding-bottom: .4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Entropy decomposition table */
+.dd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: .76rem;
+  margin-bottom: 1rem;
+}
+.dd-table th {
+  text-align: right;
+  font-weight: 600;
+  font-size: .6rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  padding: .3rem .5rem;
+  border-bottom: 1.5px solid var(--rule);
+}
+.dd-table th:first-child { text-align: left; }
+.dd-table td {
+  text-align: right;
+  padding: .4rem .5rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink2);
+  vertical-align: middle;
+}
+.dd-table td:first-child { text-align: left; font-weight: 600; color: var(--ink); }
+.dd-table tr:last-child td { border-bottom: none; }
+.dd-table tfoot td {
+  color: var(--ink);
+  font-weight: 600;
+  border-top: 1.5px solid var(--rule);
+  background: var(--bg2);
+  padding-top: .5rem;
+}
+.dd-table tfoot td:first-child { color: var(--ink2); font-weight: 400; font-style: italic; }
+.contrib-bar-wrap { display:inline-flex; align-items:center; gap:.4rem; }
+.contrib-bar {
+  height: 8px;
+  border-radius: 2px;
+  background: var(--tc);
+  opacity: .6;
+  min-width: 2px;
+  transition: width .7s ease;
+}
+
+/* Temperature preview */
+.temp-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .7rem;
+  margin-top: .7rem;
+}
+.tp-card {
+  background: var(--white);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: .75rem;
+}
+.tp-label {
+  font-family: var(--mono);
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--ink3);
+  margin-bottom: .5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.tp-label b { color: var(--ink); }
+.tp-row { display:flex; gap:.3rem; align-items:center; margin-bottom:.25rem; }
+.tp-word { font-family:var(--mono); font-size:.68rem; color:var(--ink2); min-width:70px; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tp-bar-t { height:14px; border-radius:2px; background:var(--tc); opacity:.65; min-width:2px; flex-shrink:0; }
+.tp-pct { font-family:var(--mono); font-size:.62rem; color:var(--ink3); min-width:36px; text-align:right; }
+
+/* Context paragraph */
+.dd-context {
+  font-size: .85rem;
+  line-height: 1.7;
+  color: var(--ink2);
+  margin-top: .8rem;
+}
+.dd-context strong { color: var(--ink); }
+.dd-context .term {
+  font-family: var(--mono);
+  font-size: .82em;
+  background: var(--bg2);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: .05em .35em;
+}
+
+/* Next button */
+.btn-next {
+  width: 100%;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: .85rem;
+  font-family: var(--mono);
+  font-size: .88rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: all .15s;
+  margin-top: .5rem;
+}
+.btn-next:hover { background: var(--tc); transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,0,0,.18); }
+
+/* ── END SCREEN ── */
+.end-screen { display:none; padding: 2rem 2rem 2.5rem; animation: slide-up .4s ease; }
+.end-screen.visible { display:block; }
+.end-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem; }
+.end-score-block { text-align:center; }
+.end-score-num {
+  font-family: var(--mono);
+  font-size: 3.5rem;
+  font-weight: 600;
+  color: var(--tc);
+  letter-spacing: -.05em;
+  line-height: 1;
+}
+.end-score-denom { font-family:var(--mono); font-size:.72rem; color:var(--ink3); letter-spacing:.08em; }
+.end-grade {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: .65rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border: 1.5px solid var(--tc);
+  color: var(--tc);
+  padding: .25rem .8rem;
+  border-radius: 2px;
+  margin-top: .4rem;
+}
+.end-title-block h2 { font-size: 1.4rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.end-title-block p { font-size: .88rem; color: var(--ink3); font-style: italic; margin-top: .3rem; }
+.round-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-bottom: 1.5rem;
+}
+.rb-cell {
+  font-family: var(--mono);
+  font-size: .68rem;
+  padding: .3rem .7rem;
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  background: var(--bg2);
+  color: var(--ink2);
+}
+.rb-cell.perfect { background: rgba(26,122,58,.09); border-color:#1a7a3a; color:#1a7a3a; }
+.rb-cell.good    { background: rgba(26,92,150,.09); border-color:#1a5c96; color:#1a5c96; }
+.rb-cell.miss    { background: var(--bg2); color:var(--ink3); }
+.end-lesson {
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.3rem;
+  font-size: .86rem;
+  line-height: 1.7;
+  color: var(--ink2);
+  margin-bottom: 1.5rem;
+}
+.end-lesson strong { color: var(--ink); }
+.btn-play-again {
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  padding: .8rem 2rem;
+  background: var(--tc);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-play-again:hover { filter: brightness(1.1); transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,0,0,.2); }
+
+/* ── INTRO SCREEN (before any tab selected) ── */
+.welcome {
+  padding: 2.5rem 2rem;
+  text-align: center;
+}
+.welcome h2 { font-size: 1.5rem; font-weight: 600; color: var(--ink); margin-bottom: .6rem; }
+.welcome p { font-size: .9rem; color: var(--ink3); font-style: italic; max-width: 460px; margin: 0 auto 1.5rem; line-height: 1.65; }
+.audience-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: .7rem;
+  max-width: 680px;
+  margin: 0 auto;
+}
+.audience-card {
+  background: var(--bg2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all .15s;
+  border-left: 3px solid transparent;
+}
+.audience-card:hover { background: var(--bg3); transform: translateY(-1px); box-shadow: var(--shadow); }
+.ac-icon { font-size: 1.5rem; margin-bottom: .4rem; }
+.ac-title { font-family: var(--mono); font-size: .8rem; font-weight: 600; color: var(--ink); margin-bottom: .2rem; }
+.ac-desc { font-size: .78rem; color: var(--ink3); font-style: italic; line-height: 1.4; }
+
+/* Responsive */
+@media (max-width: 560px) {
+  .prob-row { grid-template-columns: 80px 1fr 42px 18px; gap:.4rem; }
+  .temp-preview { grid-template-columns: 1fr; }
+  .score-row { grid-template-columns: 1fr 1fr; }
+  .tab-intro { flex-direction: column; }
+  .tab-intro-meta { align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<div class="app-wrap">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <h1>next_token[ ]</h1>
+    <p>Predict like a language model — across six domains</p>
+  </header>
+
+  <!-- TAB BAR -->
+  <div class="tab-bar" id="tabBar"></div>
+
+  <!-- CONTENT AREA -->
+  <div class="content-area" id="contentArea">
+
+    <!-- Welcome screen (shown initially) -->
+    <div class="welcome" id="welcomeScreen">
+      <h2>Choose your domain</h2>
+      <p>Each tab has 5 rounds tailored to a specific audience. Play the one closest to your expertise — or try them all.</p>
+      <div class="audience-grid" id="audienceGrid"></div>
+    </div>
+
+    <!-- Game interface (hidden until tab activated) -->
+    <div id="gameInterface" style="display:none;">
+
+      <!-- Tab intro strip -->
+      <div class="tab-intro" id="tabIntro"></div>
+
+      <!-- Score row -->
+      <div class="score-row">
+        <div class="score-cell">
+          <span class="sc-label">Score</span>
+          <span class="sc-val accent" id="scoreVal">0</span>
+        </div>
+        <div class="score-cell">
+          <span class="sc-label">Round</span>
+          <span class="sc-val" id="roundVal">1 / 5</span>
+        </div>
+        <div class="score-cell">
+          <span class="sc-label">Max</span>
+          <span class="sc-val">500</span>
+        </div>
+        <div class="score-cell" style="padding:0; border-right:none;">
+          <div class="pips" id="pipsRow"></div>
+        </div>
+      </div>
+
+      <!-- Entropy meter -->
+      <div class="entropy-bar-wrap" id="entropyWrap">
+        <span class="ent-label">Entropy</span>
+        <div style="flex:1; min-width:100px;">
+          <div class="ent-track"><div class="ent-fill" id="entFill"></div></div>
+          <div class="ent-axis"><span>0 bits (deterministic)</span><span>3.32 bits (uniform/10)</span></div>
+        </div>
+        <div class="ent-val" id="entVal">H = — bits</div>
+      </div>
+
+      <!-- Main game card -->
+      <div id="gameCard" style="display:block;">
+        <div class="game-body">
+          <div class="prompt-label">What word comes next?</div>
+          <div class="prompt-display" id="promptDisplay"></div>
+          <div class="input-row">
+            <input type="text" class="word-input" id="wordInput"
+              placeholder="type your prediction…"
+              autocomplete="off" autocorrect="off" spellcheck="false" maxlength="50"/>
+            <button class="btn-submit" id="submitBtn" onclick="submitGuess()">Predict →</button>
+          </div>
+          <button class="btn-skip" onclick="skipRound()">↷ skip this round</button>
+        </div>
+
+        <!-- Temperature slider -->
+        <div class="temp-section">
+          <div class="temp-header">
+            <span class="temp-lbl">🌡 Temperature — reshape the distribution</span>
+            <span class="temp-cur" id="tempCur">T = 1.0</span>
+          </div>
+          <input type="range" class="slider" id="tempSlider"
+            min="10" max="300" value="100" step="5"
+            oninput="onTempChange(this.value)"/>
+          <div class="temp-hints">
+            <span>0.1 — argmax (greedy)</span>
+            <span>1.0 — base model</span>
+            <span>3.0 — maximum diffusion</span>
+          </div>
+        </div>
+
+        <!-- Results section -->
+        <div class="results-section" id="resultsSection">
+          <div class="results-header">
+            <span class="res-label">Model's probability distribution</span>
+            <span class="pts-badge" id="ptsBadge">+0 pts</span>
+          </div>
+
+          <div class="prob-chart" id="probChart"></div>
+
+          <div class="stats-row" id="statsRow"></div>
+
+          <div class="insight-box" id="insightBox"></div>
+
+          <!-- Deep dive toggle -->
+          <button class="dd-toggle" id="ddToggle" onclick="toggleDD()">
+            <span>📐</span>
+            <span>Statistical Deep Dive — entropy decomposition, perplexity &amp; domain explanation</span>
+            <em class="dd-arrow">▼</em>
+          </button>
+
+          <!-- Deep dive panel -->
+          <div class="dd-panel" id="ddPanel"></div>
+
+          <button class="btn-next" onclick="nextRound()">Next Round →</button>
+        </div>
+      </div><!-- /gameCard -->
+
+      <!-- End screen -->
+      <div class="end-screen" id="endScreen"></div>
+
+    </div><!-- /gameInterface -->
+  </div><!-- /contentArea -->
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// TABS DEFINITION
+// ════════════════════════════════════════════════════════════════
+const TABS = [
+  { id:'epi',    label:'Epidemiologists', icon:'🔬',
+    color:'#0a7c7c', light:'#dff4f4',
+    desc:'Causal inference, study design, bias, and epidemiological reporting conventions' },
+  { id:'ph',     label:'Public Health',   icon:'🏥',
+    color:'#b55c00', light:'#fdf0e3',
+    desc:'Health policy, prevention frameworks, social determinants, and population health' },
+  { id:'stats',  label:'Statisticians',   icon:'📐',
+    color:'#2d4a8a', light:'#e8ecf8',
+    desc:'Statistical inference, Bayesian methods, regression, and hypothesis testing' },
+  { id:'python', label:'Python',          icon:'🐍',
+    color:'#8a6200', light:'#fdf8e3',
+    desc:'Data science idioms, scientific computing, and library conventions' },
+  { id:'r',      label:'R',               icon:'📊',
+    color:'#1a6db5', light:'#e5f0fb',
+    desc:'Tidyverse conventions, ggplot2, statistical computing, and package culture' },
+  { id:'daily',  label:'Daily Life',      icon:'💬',
+    color:'#9b3060', light:'#fce8f0',
+    desc:'Everyday language patterns from health searches, messaging, and casual writing' },
+];
+
+// ════════════════════════════════════════════════════════════════
+// ROUNDS DATA — 5 per tab, 30 total
+// Each: { prompt, tokens:[{word,p}×5], insight, context }
+// Probabilities approximate top-5 LLM distributions
+// ════════════════════════════════════════════════════════════════
+const ALL_ROUNDS = {
+
+epi: [
+  { prompt: "After adjusting for age, sex, and smoking status, the multivariable-adjusted hazard ratio was 1.8, indicating that exposed individuals had a",
+    tokens:[{word:"higher",p:44},{word:"significantly",p:18},{word:"markedly",p:14},{word:"substantially",p:13},{word:"statistically",p:8}],
+    insight:"<strong>Hazard ratio language is highly predictable.</strong> HR > 1 is almost universally followed by an adjective of elevation. The model learned this directly from thousands of survival analysis methods sections.",
+    context:"In the epidemiology literature, a hazard ratio above 1 is described with a small set of evaluative adjectives: 'higher', 'significantly higher', 'markedly higher'. The position after the HR value forces an adjective, and the sign of the HR (> 1) forces positive elevation. The model implicitly learned STROBE and CONSORT reporting conventions from PubMed abstracts. 'Statistically' at rank 5 reflects the common phrase 'statistically significant', but it requires a second token ('significant') to complete the thought — showing the model's one-token horizon."},
+
+  { prompt: "In a case-control study, recall bias may occur when cases are more likely than controls to",
+    tokens:[{word:"recall",p:40},{word:"remember",p:25},{word:"report",p:18},{word:"overreport",p:10},{word:"recollect",p:5}],
+    insight:"<strong>The phenomenon name creates self-referential prediction pressure.</strong> 'Recall bias' is defined as differential recall — so 'recall' dominates its own definition.",
+    context:"Recall bias is defined as differential recall between cases and controls — so the word 'recall' itself is the dominant completion (near-circular definition). This exemplifies how definitional sentences in epidemiology textbooks create strong self-referential prediction patterns. 'Remember', 'report', and 'recollect' occupy the same semantic neighbourhood — they are synonyms in this context. 'Overreport' at 10% captures directionality (cases tend to over-recall exposures), appearing in more methodologically precise texts like Rothman's <em>Modern Epidemiology</em>."},
+
+  { prompt: "The population attributable fraction estimates the proportion of disease burden that would be eliminated if the",
+    tokens:[{word:"exposure",p:55},{word:"risk",p:18},{word:"factor",p:13},{word:"intervention",p:8},{word:"cause",p:6}],
+    insight:"<strong>'Exposure' is near-obligatory here.</strong> PAF is defined relative to eliminating the exposure — and epidemiologists avoid 'cause' to sidestep causal claims without evidence.",
+    context:"The PAF formula (Levin 1953, popularised by Rothman & Greenland) is defined as the fraction of cases attributable to a specific <em>exposure</em>. 'Exposure' is the dominant token (55%) because it is the exact noun completing the conditional clause 'if the [exposure] were eliminated.' 'Risk factor' as a two-token phrase is split here — 'risk' heads it. Notice the low probability of 'cause' (6%): epidemiologists are carefully trained to say 'exposure' rather than 'cause' to avoid implying causation without sufficient evidence. The model learned this disciplinary norm."},
+
+  { prompt: "Confounding is controlled in the analysis phase using techniques such as stratification, regression adjustment, and",
+    tokens:[{word:"propensity",p:38},{word:"matching",p:24},{word:"inverse",p:18},{word:"multivariable",p:12},{word:"restriction",p:6}],
+    insight:"<strong>Propensity score methods dominate modern confounding control language.</strong> The model learned from post-2000 epi literature where propensity scores became ubiquitous.",
+    context:"Modern epidemiology describes three main analytical approaches to confounding control: stratification, regression adjustment, and propensity score methods (including propensity score matching and inverse probability of treatment weighting/IPTW). 'Propensity' leads at 38% because propensity score methods have been extensively covered since Rosenbaum & Rubin (1983) and dominate recent applied epi literature. 'Matching' (24%) often follows as the specific technique, while 'inverse' (18%) refers to IPTW. 'Restriction' at 6% is primarily a design-phase method — showing the model's sensitivity to design vs. analysis context."},
+
+  { prompt: "In directed acyclic graphs (DAGs), conditioning on a collider can",
+    tokens:[{word:"induce",p:52},{word:"create",p:22},{word:"introduce",p:14},{word:"open",p:8},{word:"produce",p:4}],
+    insight:"<strong>'Induce spurious association' is the canonical Pearl/Hernán phrasing.</strong> The model learned from causal inference texts that cluster around this exact verb.",
+    context:"Judea Pearl's formalisation of DAGs introduced the precise phrase: 'conditioning on a collider <em>induces</em> a spurious association.' This phrasing is reproduced throughout the causal inference literature — Hernán & Robins' <em>Causal Inference</em> textbook, VanderWeele's mediation work, Greenland's papers on collider bias. 'Induce' (52%) reflects direct textbook-level memorisation. 'Create' (22%) and 'introduce' (14%) are near-synonyms used in more informal treatments. 'Open' (8%) is a DAG-specific term — conditioning opens a closed path through a collider, showing domain-specific vocabulary learned from technical texts."},
+],
+
+ph: [
+  { prompt: "According to the WHO Constitution, health is defined as a state of complete physical, mental, and",
+    tokens:[{word:"social",p:88},{word:"emotional",p:5},{word:"spiritual",p:4},{word:"psychological",p:2},{word:"cognitive",p:1}],
+    insight:"<strong>Near-memorisation: H ≈ 0 bits.</strong> The WHO's 1948 definition appears in millions of documents. 'Social well-being' is the exact third term — this is effectively a lookup.",
+    context:"The WHO Constitution (1946, in force 1948) defines health as 'a state of complete physical, mental, and social well-being.' This sentence has been reproduced in textbooks, reports, journal articles, and websites countless times — it may be one of the most-quoted sentences in public health literature. The model assigns ~88% to 'social' because this is pure memorisation of a canonical definition, not generalisation. The residual 12% reflects alternative framings (WHO's definition has been critiqued and elaborated, and some documents paraphrase it with 'emotional' or 'spiritual'). Shannon entropy here is near zero — the lowest of all 30 rounds."},
+
+  { prompt: "Herd immunity for measles requires that at least 95% of the population be",
+    tokens:[{word:"vaccinated",p:72},{word:"immune",p:16},{word:"protected",p:7},{word:"immunised",p:3},{word:"covered",p:2}],
+    insight:"<strong>Vaccine-specific language dominates.</strong> Although herd immunity can be natural, the measles context almost always appears in vaccination coverage discussions.",
+    context:"The 95% threshold for measles herd immunity is a canonical public health figure. While herd immunity can be achieved through natural infection or vaccination, virtually all modern public health literature discusses it in the context of vaccination programmes — especially following outbreaks and vaccine hesitancy debates. The model assigns 72% to 'vaccinated' because the combination 'herd immunity threshold + measles + 95%' almost exclusively appears in vaccination coverage texts. 'Immune' (16%) is the general term used in historical or theoretical discussions. This shows how context within the training corpus shapes sub-distributions."},
+
+  { prompt: "The social determinants of health framework argues that individual health outcomes are primarily shaped by",
+    tokens:[{word:"social",p:35},{word:"structural",p:28},{word:"economic",p:18},{word:"environmental",p:12},{word:"systemic",p:7}],
+    insight:"<strong>Higher entropy — the SDH framework uses many near-synonymous terms.</strong> Multiple authoritative models (WHO CSDH, Marmot Commission, Dahlgren & Whitehead) each emphasise different vocabulary.",
+    context:"Unlike definitional sentences with a single canonical completion, the social determinants literature uses a cluster of related terms — 'social conditions', 'structural factors', 'economic circumstances', 'environmental influences' — more or less interchangeably across different authoritative frameworks. The WHO Commission on Social Determinants of Health emphasises structural factors; Marmot's work foregrounds social gradient; Dahlgren & Whitehead's rainbow model includes environmental and socioeconomic layers. This produces a flatter distribution (higher entropy) than WHO definition sentences. The model learned all these framings and cannot strongly commit to one."},
+
+  { prompt: "Primary prevention reduces disease incidence, secondary prevention identifies disease early, and tertiary prevention aims to",
+    tokens:[{word:"reduce",p:38},{word:"minimise",p:22},{word:"prevent",p:18},{word:"rehabilitate",p:14},{word:"limit",p:8}],
+    insight:"<strong>Tertiary prevention verbs vary across textbooks — moderate entropy.</strong> Unlike 'primary prevention = prevent disease', the tertiary definition uses multiple acceptable verbs.",
+    context:"The three-levels-of-prevention framework (Leavell & Clark, 1958) is a public health classic. Tertiary prevention is defined as reducing the impact of existing disease — minimising disability, preventing further deterioration, and rehabilitation. Unlike primary prevention where 'prevent' is near-tautological (prevent disease), the verb for tertiary prevention genuinely varies across textbooks and organisations: 'reduce' (disability), 'minimise' (burden), 'rehabilitate' (function), 'limit' (complications). This moderate entropy reflects real terminological variation in the literature, not model uncertainty."},
+
+  { prompt: "Health inequities are differences in health that are not only unnecessary and avoidable but also considered",
+    tokens:[{word:"unfair",p:52},{word:"unjust",p:28},{word:"inequitable",p:12},{word:"unacceptable",p:5},{word:"preventable",p:3}],
+    insight:"<strong>Health equity adds a normative dimension — the model learned Marmot's exact moral vocabulary.</strong> 'Unfair' and 'unjust' appear explicitly in the canonical definition.",
+    context:"Sir Michael Marmot's definition (WHO Commission on Social Determinants of Health, 2008) specifically adds a normative component: health inequities are 'systematic differences in health...that are unnecessary and avoidable, and which are also considered unfair and unjust.' The tokens 'unfair' (52%) and 'unjust' (28%) dominate because they appear explicitly in this canonical source. This is a rare case of ethical/normative language in public health having a near-deterministic completion. 'Inequitable' (12%) is used in definitions that avoid apparent tautology. The model learned both the Marmot formulation and its paraphrases."},
+],
+
+stats: [
+  { prompt: "In Bayesian inference, the posterior distribution is proportional to the likelihood multiplied by the",
+    tokens:[{word:"prior",p:90},{word:"priors",p:4},{word:"evidence",p:3},{word:"likelihood",p:2},{word:"data",p:1}],
+    insight:"<strong>Bayes' theorem: P(θ|data) ∝ P(data|θ)·P(θ).</strong> 'Prior' is near-deterministic — this is a mathematical definition reproduced verbatim in every Bayesian text.",
+    context:"Bayes' theorem, in its proportionality form, states that the posterior is proportional to the likelihood times the prior: P(θ|data) ∝ P(data|θ) × P(θ). This exact formulation appears in Gelman's <em>Bayesian Data Analysis</em>, Kruschke's <em>Doing Bayesian Data Analysis</em>, McElreath's <em>Statistical Rethinking</em>, and virtually every other Bayesian statistics textbook. The token 'prior' is assigned ~90% probability — this is effective memorisation of a definition. The residual probability goes to 'priors' (plural form), 'evidence' (informal Bayesian vocabulary), and 'likelihood' (which would be grammatically incorrect here but occasionally appears due to confusion in the training corpus)."},
+
+  { prompt: "A p-value is the probability of observing a test statistic as extreme or more extreme than the observed value, assuming the null hypothesis is",
+    tokens:[{word:"true",p:84},{word:"correct",p:8},{word:"valid",p:5},{word:"satisfied",p:2},{word:"false",p:1}],
+    insight:"<strong>The p-value is conditional on H₀ being 'true' — this is the exact wording of Fisher's definition.</strong> The ~1% mass on 'false' reflects a common student misconception present in the training data.",
+    context:"The Fisherian p-value is defined as P(T ≥ t_obs | H₀ true). The conditioning event is critical: the p-value is computed under the assumption that the null hypothesis is <em>true</em>. This formulation appears thousands of times in statistics textbooks and is the correct definition. The 1% probability on 'false' is instructive: it reflects a common student misconception — confusing the p-value with the probability that H₀ is false — that appears in statistics education literature and online discussions. The model learned both the correct definition and the misconception. 'Satisfied' (2%) appears in more formal mathematical treatments where H₀ is a parametric constraint."},
+
+  { prompt: "The ordinary least squares estimator minimises the sum of",
+    tokens:[{word:"squared",p:68},{word:"the",p:14},{word:"residuals",p:8},{word:"squares",p:7},{word:"errors",p:3}],
+    insight:"<strong>OLS minimises Σ(yᵢ − ŷᵢ)². 'Squared' dominates</strong> because 'sum of squared residuals' is the canonical phrasing in virtually every regression textbook.",
+    context:"OLS minimises the sum of squared residuals: Σᵢ(yᵢ − ŷᵢ)². The phrase 'sum of squared' is so ingrained that 'squared' (to be followed by 'residuals' or 'errors') dominates at 68%. 'The' at 14% reflects the construction 'sum of the squared differences' or 'sum of the residuals squared.' 'Residuals' appearing alone at 8% represents an abbreviated version of the canonical phrase. 'Squares' at 7% appears in the phrase 'sum of squares' used in ANOVA decomposition. This illustrates how grammatically flexible positions ('sum of ___') can still have peaked distributions when domain conventions are strong."},
+
+  { prompt: "The Bonferroni correction controls the family-wise error rate by dividing the significance threshold alpha by the number of",
+    tokens:[{word:"tests",p:72},{word:"comparisons",p:16},{word:"hypotheses",p:8},{word:"variables",p:3},{word:"outcomes",p:1}],
+    insight:"<strong>Bonferroni: α_adj = α/m.</strong> 'm' is the number of 'tests' in the dominant textbook formulation — near-deterministic from intro stats texts.",
+    context:"The Bonferroni correction adjusts α to α/m, where m is the number of simultaneous tests. 'Tests' is dominant (72%) because this is the variable name used in most introductory statistics texts and is the broadest applicable term. 'Comparisons' (16%) is more common in the specific context of post-hoc multiple comparisons following ANOVA — the correction's historical application. 'Hypotheses' (8%) appears in formal treatments where each test is explicitly associated with a hypothesis. 'Outcomes' at 1% reflects clinical trials usage where multiple outcomes drive the correction. The distribution maps disciplinary subfields: intro stats vs. ANOVA vs. clinical trials."},
+
+  { prompt: "The bias-variance tradeoff states that as model complexity increases, variance increases while",
+    tokens:[{word:"bias",p:72},{word:"underfitting",p:12},{word:"the",p:8},{word:"error",p:5},{word:"complexity",p:3}],
+    insight:"<strong>Paired antonym structure: variance ↑ forces bias ↓.</strong> 'Bias' (72%) is the noun the model predicts will be the subject of 'decreases' — showing structural next-token prediction without causal understanding.",
+    context:"The bias-variance tradeoff has a complementary relationship at its core: complex models have high variance and low bias; simple models have low variance and high bias. The prompt 'variance increases while' forces a contrasting noun/clause. The model assigns 72% to 'bias' because it has seen the phrase 'variance increases while bias decreases' countless times in machine learning textbooks (Hastie et al.'s <em>Elements of Statistical Learning</em>, Bishop's <em>PRML</em>, numerous lecture notes). This illustrates how LLMs predict next tokens probabilistically without understanding the underlying mathematical relationship — they exploit structural co-occurrence patterns."},
+],
+
+python: [
+  { prompt: "import pandas as",
+    tokens:[{word:"pd",p:94},{word:"pandas",p:3},{word:"pa",p:1},{word:"p",p:1},{word:"data",p:1}],
+    insight:"<strong>import pandas as pd is so universal it functions as a Python keyword.</strong> ~94% of all data science notebooks use exactly this alias.",
+    context:"Examining millions of Python notebooks on GitHub, Kaggle, and Google Colab, 'pd' appears as the pandas alias in approximately 94% of cases. The convention originated in early pandas tutorials and has been perpetuated through copying and teaching. 'pandas' (3%) appears when the author does not alias. 'pa' (1%) is occasionally used when the same script also imports PyArrow as pa. This is the highest-certainty code completion — 'pd' functions as an effectively reserved alias. The model learned this not from understanding Python semantics, but from sheer co-occurrence frequency. Entropy here is among the lowest in all code contexts."},
+
+  { prompt: "from sklearn.model_selection import",
+    tokens:[{word:"train_test_split",p:72},{word:"cross_val_score",p:12},{word:"GridSearchCV",p:8},{word:"KFold",p:5},{word:"StratifiedKFold",p:3}],
+    insight:"<strong>train_test_split appears first in virtually every ML tutorial</strong> — a pedagogical convention that became a statistical norm in training data.",
+    context:"sklearn.model_selection contains dozens of utilities, but train_test_split appears as the first import in ~72% of sklearn tutorials and introductory ML notebooks. This reflects a pedagogical convention rather than a technical necessity: tutorial authors universally start with a train/test split to motivate model evaluation. cross_val_score (12%) indicates a k-fold workflow. GridSearchCV (8%) signals hyperparameter tuning. The distribution maps the tutorial → production pipeline that dominates how data scientists learn scikit-learn. 'StratifiedKFold' (3%) appears in more advanced tutorials dealing with class imbalance."},
+
+  { prompt: "df.groupby('category').agg({'value':",
+    tokens:[{word:"'mean'",p:42},{word:"'sum'",p:22},{word:"'median'",p:14},{word:"np.mean",p:12},{word:"lambda",p:8}],
+    insight:"<strong>'mean' is the near-universal first aggregation</strong> in pandas data exploration — a reflection of mean-centric data analysis culture.",
+    context:"Pandas .groupby().agg() accepts string shortcuts ('mean', 'sum', 'median') or callables (np.mean, lambda). The string 'mean' dominates at 42% because pandas tutorials universally start with group-level means for exploratory analysis. 'sum' (22%) is common for financial or count data. 'median' (14%) is the robust alternative, appearing more in statistical analysis contexts. np.mean (12%) appears in older code or when custom aggregations follow immediately. lambda (8%) signals a custom aggregation function. Even in a syntactically flexible slot, community conventions create a peaked distribution."},
+
+  { prompt: "if __name__ ==",
+    tokens:[{word:"'__main__'",p:92},{word:"'main'",p:4},{word:"None",p:2},{word:"'__init__'",p:1},{word:"'test'",p:1}],
+    insight:"<strong>if __name__ == '__main__' is Python's module guard idiom — near-zero entropy.</strong> It appears in virtually every Python script intended to be run directly.",
+    context:"The Python idiom 'if __name__ == \"__main__\"' prevents code from executing when a module is imported. This guard appears in virtually every Python script intended as a runnable program and is covered in the first chapter of most Python textbooks. The model assigns ~92% to the string '__main__' — this is nearly as deterministic as the numpy alias. The residual 8% includes unusual patterns from testing frameworks ('__init__', 'test') or scripts with non-standard guard patterns. This illustrates how programming idioms function as effectively mandatory syntactic templates, with predictability rivalling mathematical definitions."},
+
+  { prompt: "plt.figure(figsize=",
+    tokens:[{word:"(10, 6)",p:36},{word:"(12, 8)",p:22},{word:"(8, 6)",p:18},{word:"(14, 6)",p:12},{word:"(16, 9)",p:8}],
+    insight:"<strong>(10, 6) is the data science community's default figure size</strong> — an arbitrary historical choice reproduced in thousands of tutorials.",
+    context:"Matplotlib's default figure size (6.4 × 4.8 inches) is considered too small for most analysis figures, so data scientists override it. The 10×6 size is the most common override, appearing in Matplotlib documentation examples and Seaborn's plotting tutorials. 12×8 is preferred for presentations and larger plots. 8×6 is a minimal enlargement. The 16:9 aspect ratio appears in slide-deck generation. The key insight: these are arbitrary numeric choices with no mathematical significance, yet community conventions are strong enough for a language model to learn clear preferences. This is purely social learning encoded as statistical signal."},
+],
+
+r: [
+  { prompt: "library(",
+    tokens:[{word:"ggplot2",p:32},{word:"tidyverse",p:28},{word:"dplyr",p:22},{word:"data.table",p:10},{word:"knitr",p:8}],
+    insight:"<strong>R's library() call is a window into the R package ecology.</strong> ggplot2 and tidyverse have dominated R teaching since ~2014.",
+    context:"Examining R scripts on GitHub and CRAN vignettes, ggplot2 and tidyverse are the most loaded packages. ggplot2 (32%) appears first in visualisation-centric workflows. tidyverse (28%) loads the entire Wickham suite (ggplot2, dplyr, tidyr, readr, etc.) and is increasingly standard in modern R teaching. dplyr (22%) appears alone in data manipulation workflows. data.table (10%) represents a different school of R programming — faster, different syntax, preferred in financial/large-data contexts. knitr (8%) reflects the large proportion of R scripts that are R Markdown documents. The distribution maps the sociology of the R community."},
+
+  { prompt: "df %>% filter(age > 18) %>%",
+    tokens:[{word:"select",p:35},{word:"mutate",p:28},{word:"group_by",p:18},{word:"summarise",p:12},{word:"arrange",p:7}],
+    insight:"<strong>The dplyr pipeline has a conventional verb ordering.</strong> After filter(), select() and mutate() are most common — a workflow convention learned from thousands of R scripts.",
+    context:"The dplyr pipeline grammar has a conventional ordering reflecting data preparation workflow: filter() → select() → mutate() → group_by() → summarise() → arrange(). After filter() removes unwanted rows, the next operation is most commonly selecting columns (select(), 35%) or creating new columns (mutate(), 28%). The group_by → summarise chain (18%, 12%) is the aggregation pattern. arrange() (7%) comes last. The distribution reflects actual R workflow conventions learned from Stack Overflow answers, R for Data Science (Wickham & Grolemund), and thousands of analysis scripts. This is a case of programming pedagogy encoding workflow norms into token probabilities."},
+
+  { prompt: "ggplot(df, aes(x = x, y = y)) +",
+    tokens:[{word:"geom_point",p:44},{word:"geom_line",p:22},{word:"geom_smooth",p:16},{word:"geom_bar",p:10},{word:"theme",p:8}],
+    insight:"<strong>Scatter plots dominate when both x and y are continuous.</strong> The aesthetics aes(x, y) signal a bivariate continuous context — geom_point() is the natural next layer.",
+    context:"When both x and y aesthetics are specified as continuous variables, the first ggplot2 layer is a scatter plot (geom_point, 44%) — the canonical exploratory visualisation for two continuous variables. geom_line (22%) is used for time series or connected data points. geom_smooth (16%) is commonly added as a second layer after geom_point, but also appears alone when the author wants a regression overlay only. geom_bar (10%) is somewhat mismatched with continuous x/y aesthetics, suggesting the model doesn't fully understand context — a limitation. theme() (8%) appearing without a geom layer suggests a styling-first workflow in some scripts."},
+
+  { prompt: "set.seed(",
+    tokens:[{word:"123",p:50},{word:"42",p:22},{word:"1234",p:12},{word:"1",p:10},{word:"2024",p:6}],
+    insight:"<strong>Random seeds have become non-random through social convention.</strong> '123' dominates because it's the seed in most introductory R textbooks — pure copying behaviour.",
+    context:"The choice of random seed is mathematically arbitrary: any integer gives a valid reproducible stream. Yet strong conventions emerged: 123 appears in ~50% of R tutorial code because it's the seed used in most introductory R textbooks and online tutorials — authors copy examples they've learned from. 42 (22%) is the 'Hitchhiker's Guide to the Galaxy' reference, beloved in the data science community. 1234 (12%) is a natural extension. 1 (10%) is the minimal seed. 2024 (6%) represents increasing use of the current year for temporal traceability. This is entirely social: reproducibility requires a fixed seed, and people default to ones they've seen."},
+
+  { prompt: "result <- lm(y ~ x, data =",
+    tokens:[{word:"df",p:65},{word:"dat",p:14},{word:"mydata",p:10},{word:"data",p:7},{word:"dataset",p:4}],
+    insight:"<strong>'df' is R's dominant dataframe name despite conflicting with the base R df() function.</strong> Community convention overrides best practice.",
+    context:"The name 'df' for a dataframe is the overwhelmingly dominant convention (65%), despite shadowing base R's df() function (the F-distribution density function). This reflects community convention over proper software engineering: the conflict rarely causes problems in practice because df() is infrequently called directly. 'dat' (14%) is used by R programmers aware of the naming issue or following the convention popularised by some R package authors. 'mydata' (10%) appears in beginner tutorials. 'data' (7%) appears in package vignettes. 'dataset' (4%) in more formal analysis scripts. The distribution maps the social structure and conventions of the R community."},
+],
+
+daily: [
+  { prompt: "I looked up my symptoms online and the website said I might have",
+    tokens:[{word:"cancer",p:44},{word:"anxiety",p:22},{word:"diabetes",p:16},{word:"stress",p:12},{word:"depression",p:6}],
+    insight:"<strong>Health websites over-represent serious diagnoses — the model learned from alarming health content.</strong> This reflects publication bias in health web content, not epidemiological base rates.",
+    context:"WebMD, Healthline, and similar health sites optimise for search traffic rather than base rates. 'Cancer' dominates at 44% not because it's the most prevalent cause of any given symptom set, but because cancer-related content is heavily represented in health websites and therefore in LLM training data. Anxiety (22%) and diabetes (16%) are broadly symptomatic conditions that appear across many symptom descriptions. This distribution reveals a documented bias: content about rare but serious conditions is over-represented relative to population prevalence. It also reflects the well-known phenomenon of 'cyberchondria' — excessive health anxiety driven by web searching, which itself generates more web content about health anxiety."},
+
+  { prompt: "The forecast says there's a 70% chance of rain, so I'm going to bring",
+    tokens:[{word:"an",p:52},{word:"my",p:32},{word:"a",p:10},{word:"the",p:4},{word:"some",p:2}],
+    insight:"<strong>'bring an umbrella' is so idiomatic that 'an' (the article before 'umbrella') is the predicted token.</strong> Fixed phrases behave as near-atomic units in LLM prediction.",
+    context:"The phrase 'bring an umbrella' is the canonical stock phrase for rain preparation across news articles, weather apps, and everyday conversation. English grammar requires 'an umbrella' (not 'a umbrella'), and the full idiom 'bring an umbrella' is reproduced so frequently in weather-related text that the model predicts 'an' (the article) as the next token — implicitly anticipating the complete phrase. 'My' (32%) reflects a slightly more personal framing ('bring my umbrella'). This illustrates a key property of LLMs: frequently co-occurring multi-token phrases are effectively predicted as a unit, even though the model only formally predicts one token at a time."},
+
+  { prompt: "To confirm your appointment, please reply YES or",
+    tokens:[{word:"NO",p:72},{word:"no",p:12},{word:"call",p:8},{word:"CANCEL",p:5},{word:"contact",p:3}],
+    insight:"<strong>Appointment reminder templates are near-identical across millions of SMS and emails.</strong> Template language has near-zero entropy — the model effectively memorised the format.",
+    context:"Appointment reminder messages (SMS, email) follow rigid templates where YES/NO is the prescribed response. The capitalised 'NO' (72%) dominates because automated reminder systems consistently capitalise both options — the model learned the template format from millions of near-identical examples. Lowercase 'no' (12%) reflects informal or email-based reminders. 'call' and 'contact' (11% combined) appear in templates that offer calling as an alternative to a text response. 'CANCEL' (5%) appears in systems offering a three-way YES/NO/CANCEL response. This is a clear example of template language in the training corpus — structured business communications create near-deterministic token distributions."},
+
+  { prompt: "Studies show that people who sleep fewer than 6 hours a night are more likely to",
+    tokens:[{word:"develop",p:32},{word:"experience",p:24},{word:"have",p:20},{word:"suffer",p:14},{word:"be",p:10}],
+    insight:"<strong>Health journalism uses a small set of verbs to connect risk factors to outcomes — moderate entropy.</strong> Different subsets of health content use different registers.",
+    context:"Health journalism has a predictable sentence structure: 'people who [behaviour] are more likely to [verb] [outcome]'. The verb choice here has moderate entropy because different health writing registers use different verbs: 'develop' (32%) is clinical and appears in formal health writing and medical journals; 'experience' (24%) is softer and preferred in wellness and consumer health content; 'have' (20%) is casual and dominates popular press; 'suffer' (14%) has a dramatic tone common in tabloid health journalism; 'be' (10%) introduces predicate adjectives ('be at risk for'). This moderate entropy reflects genuine variation across health content subgenres — all captured in the same training corpus."},
+
+  { prompt: "To reset your password, click the link we sent to your",
+    tokens:[{word:"email",p:82},{word:"inbox",p:10},{word:"phone",p:4},{word:"account",p:3},{word:"address",p:1}],
+    insight:"<strong>Password reset copy is so standardised that 'email' is near-certain.</strong> Millions of near-identical transactional emails in training data create near-zero entropy.",
+    context:"Password reset emails are among the most standardised text on the internet — every web service uses near-identical copy. 'Sent to your email' (82%) completely dominates because this is the near-universal phrasing in account management systems, reproduced millions of times. 'Inbox' (10%) is a synonym appearing in some implementations. 'Phone' (4%) reflects SMS-based two-factor reset flows, increasingly common since ~2018. This example illustrates how the sheer volume of repetitive template text in training data creates near-deterministic predictions for specific text categories — similar in structure to the Dickens quote or the WHO definition, but arising from commercial rather than literary or scientific repetition."},
+],
+
+}; // end ALL_ROUNDS
+
+// ════════════════════════════════════════════════════════════════
+// GAME STATE
+// ════════════════════════════════════════════════════════════════
+const gameState = {
+  activeTab: null,
+  temperature: 1.0,
+  tabs: {}
+};
+
+TABS.forEach(t => {
+  gameState.tabs[t.id] = { round: 0, score: 0, roundScores: [], done: false };
+});
+
+// ════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ════════════════════════════════════════════════════════════════
+function normalize(s) {
+  return s.toLowerCase().replace(/[()'".,\s_]/g,'').trim();
+}
+
+function isMatch(guess, tokenWord) {
+  const g = normalize(guess);
+  const t = normalize(tokenWord);
+  if (!g || !t) return false;
+  return g === t || t.includes(g) || g.includes(t);
+}
+
+function calcEntropy(probs) {
+  let H = 0;
+  probs.forEach(p => { const pn = p/100; if(pn>0) H -= pn * Math.log2(pn); });
+  return H;
+}
+
+function applyTemperature(baseProbs, T) {
+  const logits = baseProbs.map(p => Math.log(Math.max(p, 0.01)));
+  const scaled  = logits.map(l => l / T);
+  const maxS    = Math.max(...scaled);
+  const exps    = scaled.map(s => Math.exp(s - maxS));
+  const sum     = exps.reduce((a,b) => a+b, 0);
+  return exps.map(e => Math.round((e/sum)*1000)/10);
+}
+
+function shapeLabel(H) {
+  if (H < 0.6) return ['Highly peaked — near-deterministic', '#0a7c7c'];
+  if (H < 1.4) return ['Moderately concentrated', '#1a6db5'];
+  if (H < 2.2) return ['Spread across several tokens', '#b55c00'];
+  return ['Diffuse — high uncertainty', '#9b3060'];
+}
+
+function tabColors(id) {
+  const t = TABS.find(x => x.id === id);
+  return { color: t.color, light: t.light };
+}
+
+// ════════════════════════════════════════════════════════════════
+// UI BUILDING
+// ════════════════════════════════════════════════════════════════
+function buildTabs() {
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = TABS.map(t => `
+    <button class="tab-btn" id="tabBtn_${t.id}" onclick="selectTab('${t.id}')">
+      <span>${t.icon}</span><span>${t.label}</span>
+      <span class="done-mark"></span>
+    </button>
+  `).join('');
+
+  // Audience cards in welcome
+  const grid = document.getElementById('audienceGrid');
+  grid.innerHTML = TABS.map(t => `
+    <div class="audience-card" style="border-left-color:${t.color};"
+      onclick="selectTab('${t.id}')">
+      <div class="ac-icon">${t.icon}</div>
+      <div class="ac-title" style="color:${t.color}">${t.label}</div>
+      <div class="ac-desc">${t.desc}</div>
+    </div>
+  `).join('');
+}
+
+function applyTabTheme(id) {
+  const {color, light} = tabColors(id);
+  document.documentElement.style.setProperty('--tc', color);
+  document.documentElement.style.setProperty('--tc-light', light);
+}
+
+function selectTab(id) {
+  gameState.activeTab = id;
+  applyTabTheme(id);
+
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`tabBtn_${id}`);
+  if (btn) btn.classList.add('active');
+
+  // Show game interface
+  document.getElementById('welcomeScreen').style.display = 'none';
+  document.getElementById('gameInterface').style.display = 'block';
+
+  // Build tab intro
+  buildTabIntro(id);
+
+  const ts = gameState.tabs[id];
+  if (ts.done) {
+    showEndForTab(id);
+  } else {
+    document.getElementById('endScreen').classList.remove('visible');
+    document.getElementById('gameCard').style.display = 'block';
+    renderRound(id);
+  }
+}
+
+function buildTabIntro(id) {
+  const t = TABS.find(x => x.id === id);
+  const ts = gameState.tabs[id];
+  document.getElementById('tabIntro').innerHTML = `
+    <div class="tab-intro-text">
+      <h2>${t.icon} ${t.label}</h2>
+      <p>${t.desc}</p>
+    </div>
+    <div class="tab-intro-meta">
+      <span class="meta-pill accent-pill">5 rounds</span>
+      <span class="meta-pill">max 500 pts</span>
+      <span class="meta-pill">${ts.done ? '✓ completed' : ts.round > 0 ? `round ${ts.round+1}/5` : 'not started'}</span>
+    </div>
+  `;
+}
+
+function buildPips(id) {
+  const ts = gameState.tabs[id];
+  const pips = document.getElementById('pipsRow');
+  pips.innerHTML = Array.from({length:5}, (_,i) => {
+    let cls = 'pip';
+    if (i < ts.round) cls += ts.roundScores[i] > 0 ? ' done' : ' skipped';
+    if (i === ts.round && !ts.done) cls += ' active';
+    return `<div class="${cls}" id="pip_${i}"></div>`;
+  }).join('');
+}
+
+function updateScoreBar(id) {
+  const ts = gameState.tabs[id];
+  document.getElementById('scoreVal').textContent = ts.score;
+  document.getElementById('roundVal').textContent  = `${ts.round+1} / 5`;
+  buildPips(id);
+}
+
+function renderRound(id) {
+  const ts = gameState.tabs[id];
+  if (ts.round >= 5) { showEndForTab(id); return; }
+
+  const r = ALL_ROUNDS[id][ts.round];
+  updateScoreBar(id);
+
+  // Reset UI
+  const inp = document.getElementById('wordInput');
+  inp.value = ''; inp.disabled = false;
+  document.getElementById('submitBtn').disabled = false;
+  document.getElementById('resultsSection').classList.remove('visible');
+  document.getElementById('ddPanel').classList.remove('open');
+  document.getElementById('ddToggle').classList.remove('open');
+  document.getElementById('gameCard').style.display = 'block';
+  document.getElementById('endScreen').classList.remove('visible');
+
+  // Reset temp slider
+  gameState.temperature = 1.0;
+  document.getElementById('tempSlider').value = 100;
+  document.getElementById('tempCur').textContent = 'T = 1.0';
+
+  // Render prompt tokens
+  renderPromptTokens(r.prompt);
+
+  // Entropy at T=1
+  updateEntropyDisplay(r.tokens.map(t => t.p));
+
+  inp.focus();
+}
+
+function renderPromptTokens(text) {
+  const words = text.split(/\s+/);
+  const spans = words.map(w => `<span class="tok">${w}</span>`).join(' ');
+  document.getElementById('promptDisplay').innerHTML =
+    spans + ' <span class="tok-blank">___?</span>';
+}
+
+function updateEntropyDisplay(dist) {
+  const H = calcEntropy(dist);
+  const pct = Math.min((H / 3.32) * 100, 100);
+  const fill = document.getElementById('entFill');
+  fill.style.width = pct + '%';
+  const [, col] = shapeLabel(H);
+  fill.style.background = col;
+  document.getElementById('entVal').textContent = `H = ${H.toFixed(2)} bits`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// TEMPERATURE
+// ════════════════════════════════════════════════════════════════
+function onTempChange(val) {
+  const T = val / 100;
+  gameState.temperature = T;
+  document.getElementById('tempCur').textContent = `T = ${T.toFixed(1)}`;
+  const id  = gameState.activeTab;
+  const ts  = gameState.tabs[id];
+  const r   = ALL_ROUNDS[id][ts.round];
+  const adj = applyTemperature(r.tokens.map(t => t.p), T);
+  updateEntropyDisplay(adj);
+  // If results are shown, update bars
+  if (document.getElementById('resultsSection').classList.contains('visible')) {
+    r.tokens.forEach((tok, i) => {
+      const row = document.querySelector(`[data-tidx="${i}"]`);
+      if (!row) return;
+      const bar  = row.querySelector('.prob-fill');
+      const pctS = row.querySelector('.pp');
+      if (bar)  bar.style.width = adj[i] + '%';
+      if (pctS) pctS.textContent = adj[i].toFixed(1) + '%';
+    });
+    updateEntropyDisplay(adj);
+    updateStatsRow(adj);
+    if (document.getElementById('ddPanel').classList.contains('open')) {
+      updateTempPreviews(r.tokens);
+    }
+  }
+}
+
+function updateStatsRow(dist) {
+  const H   = calcEntropy(dist);
+  const ppl = Math.pow(2, H).toFixed(2);
+  const [shape, col] = shapeLabel(H);
+  document.getElementById('statsRow').innerHTML = `
+    <span class="stat-pill hl"><span>H</span> <b>${H.toFixed(2)} bits</b></span>
+    <span class="stat-pill"><span>Perplexity 2ᴴ</span> <b>${ppl}</b></span>
+    <span class="stat-pill" style="border-color:${col};color:${col};background:${col}18">
+      <b>${shape}</b>
+    </span>
+  `;
+}
+
+// ════════════════════════════════════════════════════════════════
+// GUESS & RESULTS
+// ════════════════════════════════════════════════════════════════
+document.getElementById('wordInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitGuess();
+});
+
+function submitGuess() {
+  const inp   = document.getElementById('wordInput');
+  const guess = inp.value.trim();
+  if (!guess) return;
+  inp.disabled = true;
+  document.getElementById('submitBtn').disabled = true;
+  revealResults(guess, false);
+}
+
+function skipRound() {
+  const id = gameState.activeTab;
+  const ts = gameState.tabs[id];
+  ts.roundScores.push(0);
+  ts.round++;
+  if (ts.round >= 5) { ts.done = true; showEndForTab(id); return; }
+  renderRound(id);
+}
+
+function revealResults(guess, skipped) {
+  const id  = gameState.activeTab;
+  const ts  = gameState.tabs[id];
+  const r   = ALL_ROUNDS[id][ts.round];
+  const T   = gameState.temperature;
+  const adj = applyTemperature(r.tokens.map(t => t.p), T);
+
+  // Find rank
+  let userRank = -1;
+  r.tokens.forEach((tok, i) => {
+    if (userRank === -1 && isMatch(guess, tok.word)) userRank = i;
+  });
+
+  const pts = userRank >= 0 ? [100,80,60,40,20][userRank] : 0;
+  ts.score += pts;
+  ts.roundScores.push(pts);
+  document.getElementById('scoreVal').textContent = ts.score;
+
+  // Pips update
+  buildPips(id);
+
+  // Points badge
+  const badge = document.getElementById('ptsBadge');
+  if      (pts===100) { badge.textContent=`+100 pts 🎯`; badge.className='pts-badge pts-a'; }
+  else if (pts>=60)   { badge.textContent=`+${pts} pts`;  badge.className='pts-badge pts-b'; }
+  else if (pts>=20)   { badge.textContent=`+${pts} pts`;  badge.className='pts-badge pts-c'; }
+  else                { badge.textContent=`+0 pts`;        badge.className='pts-badge pts-d'; }
+
+  // Build prob chart
+  buildProbChart(r.tokens, adj, guess, userRank);
+
+  // Stats row
+  updateStatsRow(adj);
+
+  // Insight
+  document.getElementById('insightBox').innerHTML = r.insight;
+
+  // Deep dive (pre-build but hidden)
+  buildDeepDive(r, adj);
+
+  document.getElementById('resultsSection').classList.add('visible');
+}
+
+function buildProbChart(tokens, dist, guess, userRank) {
+  const chart = document.getElementById('probChart');
+  chart.innerHTML = '';
+  const fills = ['pf-1','pf-2','pf-3','pf-4','pf-5'];
+
+  tokens.forEach((tok, i) => {
+    const hit = (i === userRank);
+    let wClass = 'pw';
+    if (i===0) wClass += ' r1';
+    if (hit) wClass = 'pw hit';
+
+    const row = document.createElement('div');
+    row.className = 'prob-row';
+    row.dataset.tidx = i;
+    row.innerHTML = `
+      <span class="${wClass}">${tok.word}${hit ? ' ←' : ''}</span>
+      <div class="prob-track">
+        <div class="prob-fill ${hit ? 'pf-user' : fills[i]}" style="width:0%"></div>
+      </div>
+      <span class="pp ${i===0?'hi':''}">${dist[i].toFixed(1)}%</span>
+      <span class="rank-m ${i===0?'r1':''}">#${i+1}</span>
+    `;
+    chart.appendChild(row);
+  });
+
+  // User miss row
+  if (userRank === -1 && guess) {
+    const hr = document.createElement('hr');
+    hr.className = 'user-sep';
+    chart.appendChild(hr);
+    const row = document.createElement('div');
+    row.className = 'prob-row';
+    row.dataset.tidx = 'user';
+    row.innerHTML = `
+      <span class="pw miss">${guess} ←</span>
+      <div class="prob-track">
+        <div class="prob-fill pf-user" style="width:0%"></div>
+      </div>
+      <span class="pp">~1%</span>
+      <span class="rank-m">&gt;5</span>
+    `;
+    chart.appendChild(row);
+  }
+
+  // Animate
+  requestAnimationFrame(() => {
+    tokens.forEach((_, i) => {
+      const row = document.querySelector(`[data-tidx="${i}"]`);
+      if (!row) return;
+      const bar = row.querySelector('.prob-fill');
+      setTimeout(() => { if(bar) bar.style.width = dist[i] + '%'; }, i*70+80);
+    });
+    const uRow = document.querySelector('[data-tidx="user"]');
+    if (uRow) setTimeout(() => { const b = uRow.querySelector('.prob-fill'); if(b) b.style.width='1%'; }, 450);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// DEEP DIVE PANEL
+// ════════════════════════════════════════════════════════════════
+function toggleDD() {
+  const panel  = document.getElementById('ddPanel');
+  const toggle = document.getElementById('ddToggle');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  toggle.classList.toggle('open', !isOpen);
+}
+
+function buildDeepDive(round, dist) {
+  const panel = document.getElementById('ddPanel');
+
+  // Entropy decomposition
+  const rows = round.tokens.map((tok, i) => {
+    const p    = dist[i] / 100;
+    const info = p > 0 ? -Math.log2(p) : 0;
+    const cont = p * info;
+    return { word: tok.word, p, info, cont };
+  });
+  const H   = rows.reduce((s,r) => s+r.cont, 0);
+  const ppl = Math.pow(2, H);
+  const maxCont = Math.max(...rows.map(r => r.cont));
+
+  const tableRows = rows.map(r => `
+    <tr>
+      <td>${r.word}</td>
+      <td>${(r.p*100).toFixed(1)}%</td>
+      <td>${r.info.toFixed(3)}</td>
+      <td>
+        <div class="contrib-bar-wrap">
+          <div class="contrib-bar" style="width:${Math.round((r.cont/Math.max(maxCont,0.01))*80)}px"></div>
+          <span>${r.cont.toFixed(3)}</span>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  // Temp previews at T=0.3 and T=2.0
+  const baseProbs = round.tokens.map(t => t.p);
+  const lowDist   = applyTemperature(baseProbs, 0.3);
+  const highDist  = applyTemperature(baseProbs, 2.0);
+  const lowH      = calcEntropy(lowDist);
+  const highH     = calcEntropy(highDist);
+
+  const tpRows = (d) => round.tokens.slice(0,3).map((tok,i) => `
+    <div class="tp-row">
+      <span class="tp-word">${tok.word}</span>
+      <div class="tp-bar-t" style="width:${Math.round(d[i]*0.9)}px"></div>
+      <span class="tp-pct">${d[i].toFixed(0)}%</span>
+    </div>
+  `).join('');
+
+  panel.innerHTML = `
+    <div class="dd-section-title">Entropy decomposition (Shannon H)</div>
+    <table class="dd-table">
+      <thead>
+        <tr>
+          <th>Token</th>
+          <th>p(t)</th>
+          <th>−log₂ p(t)</th>
+          <th>Contribution  p · (−log₂ p)</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+      <tfoot>
+        <tr>
+          <td>Shannon entropy H</td>
+          <td></td>
+          <td></td>
+          <td><strong>H = ${H.toFixed(3)} bits</strong></td>
+        </tr>
+        <tr>
+          <td>Perplexity  2<sup>H</sup></td>
+          <td></td>
+          <td></td>
+          <td><strong>${ppl.toFixed(2)} effective tokens</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="dd-section-title" style="margin-top:.9rem">Temperature effect on this distribution</div>
+    <div class="temp-preview" id="tempPreviewBlock">
+      <div class="tp-card">
+        <div class="tp-label"><span>T = 0.3 — greedy / focused</span><b>H = ${lowH.toFixed(2)} bits</b></div>
+        ${tpRows(lowDist)}
+      </div>
+      <div class="tp-card">
+        <div class="tp-label"><span>T = 2.0 — diffuse / creative</span><b>H = ${highH.toFixed(2)} bits</b></div>
+        ${tpRows(highDist)}
+      </div>
+    </div>
+
+    <div class="dd-section-title" style="margin-top:.9rem">Domain explanation</div>
+    <div class="dd-context">${round.context}</div>
+  `;
+}
+
+function updateTempPreviews(tokens) {
+  // Called when slider moves with panel open
+  const baseProbs = tokens.map(t => t.p);
+  const lowDist   = applyTemperature(baseProbs, 0.3);
+  const highDist  = applyTemperature(baseProbs, 2.0);
+  // (light update, panel is already rendered)
+}
+
+// ════════════════════════════════════════════════════════════════
+// NEXT ROUND
+// ════════════════════════════════════════════════════════════════
+function nextRound() {
+  const id = gameState.activeTab;
+  const ts = gameState.tabs[id];
+  ts.round++;
+  if (ts.round >= 5) {
+    ts.done = true;
+    // Mark tab as completed
+    const btn = document.getElementById(`tabBtn_${id}`);
+    if (btn) btn.classList.add('completed');
+    showEndForTab(id);
+    return;
+  }
+  renderRound(id);
+}
+
+// ════════════════════════════════════════════════════════════════
+// END SCREEN
+// ════════════════════════════════════════════════════════════════
+function showEndForTab(id) {
+  const ts = gameState.tabs[id];
+  const t  = TABS.find(x => x.id === id);
+
+  document.getElementById('gameCard').style.display = 'none';
+  const end = document.getElementById('endScreen');
+  end.classList.add('visible');
+
+  const pct = Math.round((ts.score / 500) * 100);
+  let title, subtitle, grade;
+  if      (pct >= 85) { title='You think like a language model.'; subtitle='Your token intuitions are sharply calibrated.'; grade='Expert — top decile'; }
+  else if (pct >= 65) { title='Strong domain intuitions.'; subtitle='You understand how context shapes prediction.'; grade='Proficient'; }
+  else if (pct >= 40) { title='The distribution surprised you.'; subtitle='LLMs exploit statistical regularities you missed.'; grade='Developing'; }
+  else                { title='Human priors ≠ corpus statistics.'; subtitle='That gap is exactly where LLMs derive their power.'; grade='Novice — keep exploring'; }
+
+  const breakdown = ts.roundScores.map((s,i) => {
+    const cls = s===100 ? 'perfect' : s>0 ? 'good' : 'miss';
+    const labels = ALL_ROUNDS[id].map(r => r.prompt.split(' ').slice(0,4).join(' ')+'…');
+    return `<div class="rb-cell ${cls}" title="${labels[i]}">R${i+1}: ${s}pts</div>`;
+  }).join('');
+
+  const completedCount = TABS.filter(tab => gameState.tabs[tab.id].done).length;
+  const completedNames = TABS.filter(tab => gameState.tabs[tab.id].done).map(x => x.label).join(', ');
+
+  end.innerHTML = `
+    <div class="end-top">
+      <div class="end-title-block">
+        <h2>${title}</h2>
+        <p>${t.icon} ${t.label} · ${subtitle}</p>
+      </div>
+      <div class="end-score-block">
+        <div class="end-score-num">${ts.score}</div>
+        <div class="end-score-denom">out of 500 pts</div>
+        <div class="end-grade">${grade}</div>
+      </div>
+    </div>
+    <div class="round-breakdown">${breakdown}</div>
+    <div class="end-lesson">
+      <strong>What this tab reveals:</strong> In the <em>${t.label}</em> domain, token probabilities are shaped by
+      corpus-specific conventions — reporting norms, definitional sentences, code idioms, or template language.
+      The more constrained the domain, the lower the entropy, and the more the model's predictions converge
+      with yours (if you know the conventions). Rounds you missed often reflect either memorised fixed phrases,
+      disciplinary jargon learned from specialised corpora, or statistical regularities in web/code text
+      that are invisible to human intuition.<br><br>
+      <strong>Tabs completed so far:</strong> ${completedCount}/6
+      ${completedCount > 0 ? ' — ' + completedNames : ''}
+    </div>
+    <button class="btn-play-again" onclick="replayTab('${id}')">↺ Replay this tab</button>
+  `;
+}
+
+function replayTab(id) {
+  gameState.tabs[id] = { round: 0, score: 0, roundScores: [], done: false };
+  const btn = document.getElementById(`tabBtn_${id}`);
+  if (btn) btn.classList.remove('completed');
+  document.getElementById('endScreen').classList.remove('visible');
+  document.getElementById('gameCard').style.display = 'block';
+  selectTab(id);
+}
+
+// ════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════
+function init() {
+  buildTabs();
+}
+
+init();
+</script>
+</body>
+</html>
